@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スマホライト自動点滅コントローラー</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      margin: 0;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      position: relative;
+    }
+    h1 {
+      font-size: 1.3rem;
+      margin-top: 5px;
+      margin-bottom: 15px;
+      text-align: center;
+      color: #ffca28;
+    }
+    .card {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 18px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      font-size: 0.95rem;
+    }
+    select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #2b2b2b;
+      color: #fff;
+      font-size: 1rem;
+      margin-bottom: 15px;
+      outline: none;
+    }
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    button {
+      padding: 14px 8px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      color: #fff;
+    }
+    button:active {
+      transform: scale(0.97);
+    }
+    .btn-start { background-color: #2e7d32; grid-column: span 2; font-size: 1.1rem; }
+    .btn-test { background-color: #0288d1; }
+    .btn-instant { background-color: #ed6c02; }
+    .btn-manual { background-color: #d32f2f; grid-column: span 2; }
+    
+    .status-panel {
+      text-align: center;
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    .time-display {
+      font-family: monospace;
+      font-size: 2.2rem;
+      color: #4caf50;
+      margin: 5px 0;
+    }
+    .light-indicator {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #444;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .light-indicator.on {
+      background: #ffeb3b;
+      box-shadow: 0 0 14px #ffeb3b;
+    }
+    .log-area {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-top: 8px;
+      white-space: pre-line;
+    }
+
+    /* 注意書きエリア */
+    .notice-card {
+      background: #252818;
+      border: 2px solid #ffca28;
+      border-radius: 12px;
+      padding: 15px;
+      width: 100%;
+      max-width: 480px;
+      margin-top: 5px;
+      margin-bottom: 20px;
+    }
+    .notice-title {
+      font-size: 0.95rem;
+      font-weight: bold;
+      color: #ffca28;
+      margin-bottom: 8px;
+    }
+    .notice-list {
+      margin: 0;
+      padding-left: 0;
+      list-style: none;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      color: #f0f0f0;
+    }
+    .notice-list li {
+      margin-bottom: 6px;
+      text-indent: -1em;
+      padding-left: 1em;
+    }
+
+    /* 巨大「移動」オーバーレイ表示 */
+    .move-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(213, 0, 0, 0.95);
+      color: #ffffff;
+      font-size: 22vw;
+      font-weight: 900;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      letter-spacing: 10px;
+      animation: pulse 0.8s infinite alternate;
+    }
+    .move-overlay.active {
+      display: flex;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.9; }
+      100% { transform: scale(1.05); opacity: 1.0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 巨大「移動」表示用 -->
+  <div class="move-overlay" id="moveOverlay">移動</div>
+
+  <h1>スマホライト自動点滅コントローラー</h1>
+
+  <div class="card">
+    <label for="patternSelect">パターン選択 (1〜13):</label>
+    <select id="patternSelect">
+      <!-- JavaScriptで動的作成 -->
+    </select>
+
+    <div class="btn-grid">
+      <button class="btn-start" onclick="startProgram(false)">① スタート (タイマー開始)</button>
+      <button class="btn-test" onclick="testFlash()">② テスト (1秒点滅)</button>
+      <button class="btn-instant" onclick="startProgram(true)">③ 即時プログラム開始</button>
+      <button class="btn-manual" onclick="toggleManualLight()">④ 手動ライト ON / OFF</button>
+    </div>
+  </div>
+
+  <div class="card status-panel">
+    <div>経過時間 / 状態</div>
+    <div class="time-display" id="timeDisplay">00:00.00</div>
+    <div>
+      ライト状態: <span id="statusText">消灯</span>
+      <span class="light-indicator" id="lightIndicator"></span>
+    </div>
+    <div class="log-area" id="logArea">準備完了</div>
+  </div>
+
+  <!-- 画面下部 注意書き -->
+  <div class="notice-card">
+    <div class="notice-title">【注意事項】</div>
+    <ul class="notice-list">
+      <li>・必ず発表前に『テスト』を押して、カメラの使用を許可すること</li>
+      <li>・影は『ヘイ！』で緑のボタンを押す</li>
+      <li>・光は影が躍っている初めの『ドーン』のところで緑のボタンを押す</li>
+    </ul>
+  </div>
+
+  <script>
+    // エクセルデータ「スマホライト_2.xlsx」に基づくタイムライン
+    // Index 0~5: 影パターン1~6 / Index 6~12: 光パターン7~13
+    const excelTimeline = [
+      { t: 72.80, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","RANDOM","RANDOM","RANDOM","RANDOM","RANDOM","RANDOM","RANDOM"], endT: 75.93 },
+      { t: 75.93, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 76.55, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 77.12, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 77.70, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 78.26, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 78.64, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 78.97, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","RANDOM","RANDOM","RANDOM","RANDOM","RANDOM","RANDOM","RANDOM"], endT: 82.10 },
+      { t: 82.10, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 82.73, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 83.22, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 83.85, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 84.38, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 84.80, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 85.13, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.25 },
+      { t: 85.15, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 85.667, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","OFF","ON","OFF","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 86.183, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","ON","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 86.700, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","ON","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 87.217, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","ON","OFF","OFF"], dur: 0.3 },
+      { t: 87.733, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","ON","OFF"], dur: 0.3 },
+      { t: 88.250, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","ON","ON","ON","ON","ON","ON","ON"], dur: 0.8 },
+      { t: 89.250, actions: ["OFF","OFF","OFF","OFF","OFF","OFF","MOVE","OFF","OFF","OFF","OFF","OFF","OFF"], moveDur: 3.0 },
+      
+      // 影パート (122.29秒~)
+      { t: 122.29, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 122.89, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 123.44, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 124.04, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 124.75, actions: ["RANDOM","RANDOM","RANDOM","RANDOM","RANDOM","RANDOM","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], endT: 127.88 },
+      { t: 134.05, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 134.68, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 135.17, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 135.80, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 136.33, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 136.75, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 137.08, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.25 },
+      { t: 137.10, actions: ["ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 137.617, actions: ["OFF","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 138.133, actions: ["OFF","OFF","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 138.650, actions: ["OFF","OFF","OFF","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 139.167, actions: ["OFF","OFF","OFF","OFF","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 139.683, actions: ["OFF","OFF","OFF","OFF","OFF","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.3 },
+      { t: 140.200, actions: ["ON","ON","ON","ON","ON","ON","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], dur: 0.8 },
+      { t: 141.200, actions: ["MOVE","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF","OFF"], moveDur: 3.0 }
+    ];
+
+    // 即時開始時のスタート秒数設定
+    // 影パターン(1~6): 122.29秒 / 光パターン(7~13): 70.34秒 (1分10秒34)
+    const earliestLightTimes = [
+      122.29, 122.29, 122.29, 122.29, 122.29, 122.29, // 影パターン1〜6
+      70.34,  70.34,  70.34,  70.34,  70.34,  70.34,  70.34  // 光パターン7〜13
+    ];
+
+    let track = null;
+    let isLightOn = false;
+    let timerId = null;
+    let startTime = 0;
+    let randomBlinkInterval = null;
+
+    // プルダウンのドロップダウン作成 (1〜13)
+    const selectEl = document.getElementById('patternSelect');
+    for (let i = 1; i <= 13; i++) {
+      const opt = document.createElement('option');
+      opt.value = i - 1;
+      const typeStr = i <= 6 ? `影パターン ${i}` : `光パターン ${i}`;
+      opt.textContent = typeStr;
+      selectEl.appendChild(opt);
+    }
+
+    async function initCamera() {
+      if (track) return true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } }
+        });
+        track = stream.getVideoTracks()[0];
+        setLog("カメラ・ライト接続成功");
+        return true;
+      } catch (err) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          track = stream.getVideoTracks()[0];
+          setLog("カメラ接続成功（標準）");
+          return true;
+        } catch (e) {
+          alert("カメラ/ライトへのアクセスが許可されませんでした。画面上のインジケーターのみ動作します。");
+          setLog("ライト機能なし（UI表示のみ動作）");
+          return false;
+        }
+      }
+    }
+
+    async function setLightState(on) {
+      isLightOn = on;
+      const indicator = document.getElementById('lightIndicator');
+      const statusText = document.getElementById('statusText');
+      
+      if (on) {
+        indicator.classList.add('on');
+        statusText.textContent = "点灯中";
+      } else {
+        indicator.classList.remove('on');
+        statusText.textContent = "消灯";
+      }
+
+      if (track) {
+        try {
+          const capabilities = await track.getCapabilities();
+          if (capabilities.torch) {
+            await track.applyConstraints({ advanced: [{ torch: on }] });
+          }
+        } catch (e) {}
+      }
+    }
+
+    function setLog(msg) {
+      document.getElementById('logArea').textContent = msg;
+    }
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      const ms = Math.floor((sec % 1) * 100);
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(2, '0')}`;
+    }
+
+    function clearAllTimers() {
+      if (timerId) clearInterval(timerId);
+      if (randomBlinkInterval) clearInterval(randomBlinkInterval);
+      timerId = null;
+      randomBlinkInterval = null;
+      document.getElementById('moveOverlay').classList.remove('active');
+    }
+
+    // ① & ③ プログラムスタート
+    async function startProgram(instantStart = false) {
+      await initCamera();
+      clearAllTimers();
+      setLightState(false);
+
+      const pIdx = parseInt(selectEl.value, 10);
+      
+      // 即時開始の場合は設定された秒数（光:70.34s, 影:122.29s）の直前からスタート
+      const startOffset = instantStart ? (earliestLightTimes[pIdx] - 0.1) : 0;
+      startTime = performance.now() - (startOffset * 1000);
+
+      const pName = pIdx < 6 ? `影パターン${pIdx+1}` : `光パターン${pIdx+1}`;
+      const timeStr = formatTime(earliestLightTimes[pIdx]);
+      setLog(`プログラム開始: ${pName}\n(${instantStart ? `即時開始: ${timeStr} から` : '通常スタート'})`);
+
+      let executedEvents = new Set();
+
+      timerId = setInterval(() => {
+        const currentTime = (performance.now() - startTime) / 1000;
+        document.getElementById('timeDisplay').textContent = formatTime(currentTime);
+
+        excelTimeline.forEach((event, idx) => {
+          if (currentTime >= event.t && !executedEvents.has(idx)) {
+            const action = event.actions[pIdx];
+
+            if (action === "RANDOM") {
+              executedEvents.add(idx);
+              startRandomBlink(event.endT);
+            } 
+            else if (action === "ON") {
+              executedEvents.add(idx);
+              if (randomBlinkInterval) clearInterval(randomBlinkInterval);
+              setLightState(true);
+              
+              const dur = event.dur || 0.2;
+              setTimeout(() => { setLightState(false); }, dur * 1000);
+            }
+            else if (action === "MOVE") {
+              executedEvents.add(idx);
+              showMoveOverlay(event.moveDur || 3.0);
+            }
+          }
+        });
+
+        // 終了判定
+        const lastEvent = excelTimeline[excelTimeline.length - 1];
+        if (currentTime > lastEvent.t + 4.0) {
+          clearAllTimers();
+          setLightState(false);
+          setLog("プログラム終了");
+        }
+      }, 30);
+    }
+
+    // 「移動」巨大オーバーレイ表示
+    function showMoveOverlay(durationSec) {
+      const overlay = document.getElementById('moveOverlay');
+      overlay.classList.add('active');
+      setTimeout(() => {
+        overlay.classList.remove('active');
+      }, durationSec * 1000);
+    }
+
+    // ランダム点滅
+    function startRandomBlink(endTime) {
+      if (randomBlinkInterval) clearInterval(randomBlinkInterval);
+      setLog("ランダム点滅中...");
+      
+      randomBlinkInterval = setInterval(() => {
+        const currentTime = (performance.now() - startTime) / 1000;
+        if (currentTime >= endTime) {
+          clearInterval(randomBlinkInterval);
+          randomBlinkInterval = null;
+          setLightState(false);
+          return;
+        }
+        setLightState(Math.random() > 0.5);
+      }, 250);
+    }
+
+    // ② テストボタン（1秒点滅）
+    async function testFlash() {
+      await initCamera();
+      clearAllTimers();
+      setLog("テスト点滅実行中 (1秒)");
+      
+      let state = false;
+      let count = 0;
+      const testInterval = setInterval(() => {
+        state = !state;
+        setLightState(state);
+        count++;
+        if (count >= 6) {
+          clearInterval(testInterval);
+          setLightState(false);
+          setLog("テスト完了（ライト許可完了）");
+        }
+      }, 150);
+    }
+
+    // ④ 手動ON/OFF
+    async function toggleManualLight() {
+      await initCamera();
+      clearAllTimers();
+      setLightState(!isLightOn);
+      setLog(`手動切り替え: ${isLightOn ? 'ON' : 'OFF'}`);
+    }
+  </script>
+</body>
+</html>
