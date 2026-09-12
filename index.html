@@ -179,7 +179,7 @@
 
     <div class="btn-grid">
       <!-- 親スマホだけに表示 -->
-      <button id="hostStartButton" class="btn-start" style="display:none;" onclick="hostStartNow()">▶ 全員 今から開始</button>
+      <button id="hostStartButton" class="btn-start" style="display:none;" onclick="hostStartNow()">▶ 全員 タイマー開始</button>
 
       <!-- 子スマホだけに表示。最初に必ず押してカメラ/ライトを許可 -->
       <button id="clientReadyButton" class="btn-start" onclick="clientReady()">① 準備（ライト許可）</button>
@@ -489,7 +489,7 @@
     async function clientReady() {
       const ok = await initCamera();
       if (ok) {
-        setLog("準備完了\n親スマホの開始を待っています");
+        setLog("準備完了\n親スマホのタイマー開始を待っています");
         document.getElementById("clientReadyButton").textContent = "✓ 準備完了・開始待機中";
         document.getElementById("clientReadyButton").disabled = true;
       }
@@ -499,17 +499,17 @@
     async function hostStartNow() {
       const pIdx = parseInt(selectEl.value, 10);
       const command = {
-        type: "START_NOW",
+        type: "START_TIMER",
         pattern: pIdx,
         commandId: Date.now()
       };
 
       // 親自身も同時に開始
-      startProgram(true);
+      startProgram(false);
 
       try {
         await set(ref(database, "lightControl/command"), command);
-        setLog("全員に開始命令を送信しました");
+        setLog("全員にタイマー開始命令を送信しました");
       } catch (error) {
         console.error(error);
         setLog("Firebase送信エラー: " + error.message);
@@ -537,7 +537,7 @@
       // 親は自分で開始済みなので、受信処理では動かさない
       if (isHost) return;
 
-      if (command.type === "START_NOW") {
+      if (command.type === "START_TIMER") {
         // 準備済みなら権限ダイアログは出ず、そのまま開始
         if (!track) {
           setLog("開始命令を受信しましたが、準備が完了していません");
@@ -545,7 +545,7 @@
         }
 
         selectEl.value = String(command.pattern);
-        startProgram(true);
+        startProgram(false);
       }
     }, (error) => {
       console.error(error);
