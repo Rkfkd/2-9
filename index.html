@@ -178,9 +178,14 @@
     </select>
 
     <div class="btn-grid">
-      <button class="btn-start" onclick="startProgram(false)">① スタート (タイマー開始)</button>
+      <!-- 親スマホだけに表示 -->
+      <button id="hostStartButton" class="btn-start" style="display:none;" onclick="hostStartNow()">▶ 全員 今から開始</button>
+
+      <!-- 子スマホだけに表示。最初に必ず押してカメラ/ライトを許可 -->
+      <button id="clientReadyButton" class="btn-start" onclick="clientReady()">① 準備（ライト許可）</button>
+
       <button class="btn-test" onclick="testFlash()">② テスト (1秒点滅)</button>
-      <button class="btn-instant" onclick="startProgram(true)">③ 即時プログラム開始</button>
+      <button id="localInstantButton" class="btn-instant" onclick="startProgram(true)">③ この端末だけ即時開始</button>
       <button class="btn-manual" onclick="toggleManualLight()">④ 手動ライト ON / OFF</button>
     </div>
   </div>
@@ -205,7 +210,30 @@
     </ul>
   </div>
 
-  <script>
+  <script type="module">
+    // ==============================
+    // Firebase：親スマホ → 全員へ開始命令
+    // ==============================
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDzJz0P4-cQ3sEvG5Q1LXVvggdXXs7bHGo",
+      authDomain: "project-7328770458177264817.firebaseapp.com",
+      databaseURL: "https://project-7328770458177264817-default-rtdb.firebaseio.com",
+      projectId: "project-7328770458177264817",
+      storageBucket: "project-7328770458177264817.firebasestorage.app",
+      messagingSenderId: "247971750311",
+      appId: "1:247971750311:web:6eccd0bdda9fcfe1585682",
+      measurementId: "G-3LT4NZ91PB"
+    };
+
+    const firebaseApp = initializeApp(firebaseConfig);
+    const database = getDatabase(firebaseApp);
+
+    // URLの末尾に ?host=1 を付けた端末だけ親スマホ
+    const isHost = new URLSearchParams(window.location.search).get("host") === "1";
+
     // エクセルデータ「スマホライト_2.xlsx」に基づくタイムライン
     // Index 0~5: 影パターン1~6 / Index 6~12: 光パターン7~13
     const excelTimeline = [
@@ -452,6 +480,94 @@
       setLightState(!isLightOn);
       setLog(`手動切り替え: ${isLightOn ? 'ON' : 'OFF'}`);
     }
+
+    // ==============================
+    // Firebase同期機能
+    // ==============================
+
+    // 子スマホ：最初にカメラ/ライトを許可して待機
+    async function clientReady() {
+      const ok = await initCamera();
+      if (ok) {
+        setLog("準備完了\n親スマホの開始を待っています");
+        document.getElementById("clientReadyButton").textContent = "✓ 準備完了・開始待機中";
+        document.getElementById("clientReadyButton").disabled = true;
+      }
+    }
+
+    // 親スマホ：「今から開始」を全員へ送信
+    async function hostStartNow() {
+      const pIdx = parseInt(selectEl.value, 10);
+      const command = {
+        type: "START_NOW",
+        pattern: pIdx,
+        commandId: Date.now()
+      };
+
+      // 親自身も同時に開始
+      startProgram(true);
+
+      try {
+        await set(ref(database, "lightControl/command"), command);
+        setLog("全員に開始命令を送信しました");
+      } catch (error) {
+        console.error(error);
+        setLog("Firebase送信エラー: " + error.message);
+      }
+    }
+
+    // Firebaseを監視。ページを開いた瞬間の古い命令は無視する。
+    let firstCommandSnapshot = true;
+    let lastCommandId = null;
+
+    onValue(ref(database, "lightControl/command"), (snapshot) => {
+      const command = snapshot.val();
+      if (!command) return;
+
+      // 新しく接続した子が、前回の開始命令で勝手に動かないようにする
+      if (firstCommandSnapshot) {
+        firstCommandSnapshot = false;
+        lastCommandId = command.commandId;
+        return;
+      }
+
+      if (command.commandId === lastCommandId) return;
+      lastCommandId = command.commandId;
+
+      // 親は自分で開始済みなので、受信処理では動かさない
+      if (isHost) return;
+
+      if (command.type === "START_NOW") {
+        // 準備済みなら権限ダイアログは出ず、そのまま開始
+        if (!track) {
+          setLog("開始命令を受信しましたが、準備が完了していません");
+          return;
+        }
+
+        selectEl.value = String(command.pattern);
+        startProgram(true);
+      }
+    }, (error) => {
+      console.error(error);
+      setLog("Firebase接続エラー: " + error.message);
+    });
+
+    // 親/子の画面表示
+    if (isHost) {
+      document.getElementById("hostStartButton").style.display = "block";
+      document.getElementById("clientReadyButton").style.display = "none";
+      document.getElementById("localInstantButton").style.display = "none";
+      setLog("親スマホモード\nテスト後、全員開始を押してください");
+    } else {
+      setLog("子スマホモード\nまず「準備（ライト許可）」を押してください");
+    }
+
+    // type=moduleでは inline onclick から関数を直接見つけられないため公開
+    window.startProgram = startProgram;
+    window.testFlash = testFlash;
+    window.toggleManualLight = toggleManualLight;
+    window.clientReady = clientReady;
+    window.hostStartNow = hostStartNow;
   </script>
 </body>
 </html>
